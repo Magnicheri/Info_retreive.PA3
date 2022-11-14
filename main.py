@@ -6,7 +6,9 @@ from sklearn.metrics import accuracy_score as acc
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from scipy.optimize import linear_sum_assignment
+from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 
@@ -19,37 +21,29 @@ df_nodes =data_contents[word_col_name].to_numpy()
 
 scaler = StandardScaler()
 df_nodes_segment = scaler.fit_transform(df_nodes)
-pca = PCA(n_components=7, random_state=63)
+pca = PCA(n_components= 15, svd_solver='arpack')#7
 df_nodes_pca = pca.fit_transform(df_nodes_segment)
 
 adjmat = np.load('Adj_matrix.npy')
 
 df_nodes_adj = np.dot(np.transpose(adjmat), df_nodes_pca)
-df_nodes_adj = scaler.fit_transform(df_nodes_adj)
 
-model = KMeans(n_clusters=7, init="k-means++", random_state=220)
+model = KMeans(n_clusters=7, init="k-means++", n_init = 50, max_iter=1000, random_state=613)#4693 #30230
 model.fit_predict(df_nodes_adj)
-print(model.cluster_centers_)
-
 
 y_hat = model.labels_
 
 y , y_idx = pd.factorize(data_contents['label'])
 y_mapping = {y_idx[k]: k for k in range(7)}
 
-transpose = np.transpose(df_nodes_adj)
+transpose = np.transpose(df_nodes_adj )
 sum_list =[]
 
 hungarian = []
 for k in range(7):
-    hungarian.append(np.bincount(y_hat[y==k]))
+    hungarian.append(np.bincount(y_hat[y == k]))
 
-hg_mapping = linear_sum_assignment(hungarian, maximize= True)
-
-print("Correct mapping lables given with data set: ")
-print(hg_mapping[0]),"\n"
-print("Labels predicted by model(Hungarain method): ")
-print (hg_mapping[1], "\n")
+_, hg_mapping = linear_sum_assignment(hungarian, maximize = True)
 
 lbl_mapping = [-1]*7
 for k in y_mapping:
@@ -57,13 +51,29 @@ for k in y_mapping:
     best_cls = np.argmax(np.bincount(model.labels_[y==y_mapping[k]])/np.bincount(model.labels_))
     lbl_mapping[y_mapping[k]] = best_cls
 
-print("Labels predicted by model(LBL method): ")
+print("LBL Mapping:")
 print(lbl_mapping, "\n")
+print("Hungarian Accuracy: ")
+print(acc([hg_mapping[i] for i in y], y_hat), "\n")
 
+print("Standard Metrics")
 for m, m_name in ((nmi, 'NMI'), (ari, 'AIR'), (acc, 'ACC')):
        print(f'{m_name:}: {m(y,y_hat):.3f}')
 
-model = KMeans(n_clusters=7, init="k-means++", random_state=220) #250
-model.fit_predict(df_nodes_adj)
-plt.scatter(df_nodes_adj[:,0], df_nodes_adj[:,1] , c=model.labels_.astype(float))
+tsne = TSNE(n_components=2, learning_rate='auto', n_iter=500, init= 'random')
+df_nodes_tsne = tsne.fit_transform(df_nodes_adj)
+
+
+df_names = (data_contents['paperid'])
+
+plt.scatter( df_names, y_hat, c=model.labels_.astype(float))
+plt.show()
+
+plt.scatter(df_names, y , c=model.labels_.astype(float))
+plt.show()
+
+plt.scatter(df_nodes_adj[:, 0], df_nodes_adj[:, 1], c=model.labels_.astype(float))
+plt.show()
+
+plt.scatter(df_nodes_tsne[:, 0], df_nodes_tsne[:, 1], c=model.labels_.astype(float))
 plt.show()
